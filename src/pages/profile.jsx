@@ -28,7 +28,7 @@ export default function EmergencyDetailsPage() {
     const fetchUserData = async () => {
       try {
         const response = await fetch(
-          `https://emergencyqr-production.up.railway.app/api/auth/me/${id}`
+          `https://emergencyqr-kappa.vercel.app/api/auth/me/${id}`
         );
         if (!response.ok) {
           throw new Error(
@@ -89,7 +89,7 @@ export default function EmergencyDetailsPage() {
 
     try {
       const sos = await fetch(
-        "https://emergencyqr-production.up.railway.app/api/sos/trigger",
+        "https://emergencyqr-kappa.vercel.app/api/sos/trigger",
         {
           method: "POST",
           headers: {
@@ -195,7 +195,7 @@ export default function EmergencyDetailsPage() {
       try {
         console.log("Sending message to AI:", userMessage);
         const response = await fetch(
-          "https://emergencyqr-production.up.railway.app/api/chatbot/ask",
+          "https://emergencyqr-kappa.vercel.app/api/chatbot/ask",
           {
             method: "POST",
             headers: {

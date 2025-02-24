@@ -76,7 +76,7 @@ export default function Dashboard() {
         console.log("fetching");
         const token = localStorage.getItem('authToken');
         console.log("authHeader: ", token); 
-        const res = await fetch("https://emergencyqr-production.up.railway.app/api/auth/update", {
+        const res = await fetch("https://emergencyqr-kappa.vercel.app/api/auth/update", {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
@@ -90,7 +90,7 @@ export default function Dashboard() {
         });
             const data = await res.json();
             console.log(data)
-            const qr = await fetch("https://emergencyqr-production.up.railway.app/api/qr/generate", {
+            const qr = await fetch("https://emergencyqr-kappa.vercel.app/api/qr/generate", {
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",

@@ -38,7 +38,7 @@ export default function Auth() {
 
     setLoading(true);
     try {
-      const res = await fetch("https://emergencyqr-production.up.railway.app/api/auth/login", {
+      const res = await fetch("https://emergencyqr-kappa.vercel.app/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -98,7 +98,7 @@ export default function Auth() {
     setLoading(true);
     try {
       const res = await fetch(
-        "https://emergencyqr-production.up.railway.app/api/auth/register",
+        "https://emergencyqr-kappa.vercel.app/api/auth/register",
         {
           method: "POST",
           headers: {

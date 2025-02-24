@@ -76,7 +76,7 @@ export default function Dashboard() {
         console.log("fetching");
         const token = localStorage.getItem('authToken');
         console.log("authHeader: ", token); 
-        const res = await fetch("https://emergencyqr.vercel.app/api/auth/update", {
+        const res = await fetch("https://emergencyqr-production.up.railway.app/api/auth/update", {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
@@ -90,7 +90,7 @@ export default function Dashboard() {
         });
             const data = await res.json();
             console.log(data)
-            const qr = await fetch("https://emergencyqr.vercel.app/api/qr/generate", {
+            const qr = await fetch("https://emergencyqr-production.up.railway.app/api/qr/generate", {
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",
@@ -226,7 +226,7 @@ export default function Dashboard() {
                       Download QR
                     </button>
                     <button 
-                      onClick={() => { navigator.clipboard.writeText(`https://emergencyqr-frontend.vercel.app/profile/${qrData.id}`); setSuccess("QR URL copied to clipboard!"); }}
+                      onClick={() => { navigator.clipboard.writeText(`https://emergencyqr-frontend-seven.vercel.app/profile/${qrData.id}`); setSuccess("QR URL copied to clipboard!"); }}
                       className="flex items-center py-2 px-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-lg font-medium transition-colors"
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

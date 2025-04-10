@@ -8,43 +8,36 @@ export default function EmergencyDetailsPage() {
   const [sosActivated, setSosActivated] = useState(false);
   const [sosLoading, setSosLoading] = useState(false);
   const [sosMessage, setSosMessage] = useState("");
-  const { id } = useParams();
-  const lat = 18.4575775;
-  const lon = 73.850721;
-
-  // Chatbot states
+  const [userLocation, setUserLocation] = useState({ lat: null, lon: null });
   const [chatOpen, setChatOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      type: "bot",
-      text: "Hello! I'm your Emergency AI Assistant. How can I help you today? You can ask me about first aid, emergency procedures, or how to use this application.",
-    },
-  ]);
+  const [messages, setMessages] = useState([{ 
+    type: "bot",
+    text: "Hello! I'm your Emergency AI Assistant. How can I help you today?"
+  }]);
   const [inputMessage, setInputMessage] = useState("");
   const [isBotTyping, setIsBotTyping] = useState(false);
+  const { id } = useParams();
   const chatEndRef = useRef(null);
+  const locationUpdateInterval = useRef(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const response = await fetch(
-          `https://emergencyqr-kappa.vercel.app/api/auth/me/${id}`
-        );
-        if (!response.ok) {
-          throw new Error(
-            "Failed to load your emergency information. Please try again."
-          );
-        }
+        const response = await fetch(`https://emergencyqr-kappa.vercel.app/api/auth/me/${id}`);
+        
+        if (response.status === 404) throw new Error("User not found");
+        if (response.status === 500) throw new Error("Server error");
+        if (!response.ok) throw new Error("Failed to load information");
+
         const data = await response.json();
+        if (!data || typeof data !== "object") throw new Error("Invalid data format");
 
         setTimeout(() => {
           setUserData(data);
           setLoading(false);
         }, 1000);
       } catch (err) {
-        setError(
-          "Failed to load your emergency information. Please try again."
-        );
+        setError(err.message || "Failed to load information");
         setLoading(false);
       }
     };
@@ -53,191 +46,135 @@ export default function EmergencyDetailsPage() {
   }, [id]);
 
   useEffect(() => {
-    try {
-      if (!navigator.geolocation) {
-        alert("Geolocation is not supported by your browser.");
-      }
+    const handleGeolocation = () => {
+      try {
+        if (!navigator.geolocation) return alert("Geolocation not supported");
 
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
-            console.log(lat);
-            console.log(lon);
-          },
-          (error) => {
-            console.error("Error getting location:", error.message);
-          }
-        );
-      } else {
-        console.error("Geolocation is not supported by this browser.");
-      }
-    } catch (err) {
-      console.error("Error getting location:", err.message);
-    }
-  }, []);
+        locationUpdateInterval.current = setInterval(() => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const { latitude, longitude } = position.coords;
+              setUserLocation({ lat: latitude, lon: longitude });
+            },
+            (error) => {
+              if (userData?.location) setUserLocation(userData.location);
+              console.error("Location error:", error.message);
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        }, 10000);
 
-  // Auto-scroll chat to bottom when new messages appear
+        return () => clearInterval(locationUpdateInterval.current);
+      } catch (err) {
+        console.error("Geolocation setup failed:", err);
+      }
+    };
+
+    handleGeolocation();
+  }, [userData]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSOS = async () => {
+    if (!userLocation.lat || !userLocation.lon) {
+      setSosMessage("Waiting for location data...");
+      return;
+    }
+
     setSosLoading(true);
     setSosMessage("");
 
     try {
-      const sos = await fetch(
-        "https://emergencyqr-kappa.vercel.app/api/sos/trigger",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: userData._id,
-            location: {
-              lat: lat,
-              long: lon,
-            },
-          }),
-        }
-      );
+      const sos = await fetch("https://emergencyqr-kappa.vercel.app/api/sos/trigger", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("emergencyToken")}`
+        },
+        body: JSON.stringify({
+          id: userData._id,
+          location: { lat: userLocation.lat, long: userLocation.lon }
+        })
+      });
+
+      if (sos.status === 401) throw new Error("Authentication failed");
+      if (sos.status === 429) throw new Error("Too many SOS requests");
+      if (!sos.ok) throw new Error("SOS request failed");
+
       const sosData = await sos.json();
-      console.log(sosData);
+      if (!sosData.success) throw new Error(sosData.message || "SOS failed");
+
       setTimeout(() => {
         setSosActivated(true);
-        setSosMessage(
-          "Emergency contacts have been notified of your situation"
-        );
+        setSosMessage("Emergency contacts notified");
         setSosLoading(false);
-
-        // Reset SOS state after 10 seconds
         setTimeout(() => {
           setSosActivated(false);
           setSosMessage("");
         }, 10000);
       }, 2000);
     } catch (err) {
-      setSosMessage(
-        "Failed to send emergency alerts. Please try again or call emergency services directly."
-      );
+      setSosMessage(err.message || "Failed to send alerts");
       setSosLoading(false);
     }
   };
 
   const processMessage = async (userMessage) => {
-    setMessages((prev) => [...prev, { type: "user", text: userMessage }]);
+    setMessages(prev => [...prev, { type: "user", text: userMessage }]);
     setInputMessage("");
     setIsBotTyping(true);
 
-    const lowerCaseMessage = userMessage.toLowerCase();
-    let botResponse = "";
-    let foundMatch = true;
+    try {
+      const response = await fetch("https://emergencyqr-kappa.vercel.app/api/chatbot/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage, id })
+      });
 
-    if (
-      lowerCaseMessage.includes("cpr") ||
-      lowerCaseMessage.includes("cardiopulmonary resuscitation")
-    ) {
-      botResponse =
-        "For CPR: 1) Check if the person is responsive. 2) Call emergency services. 3) Place the heel of your hand on the center of the chest. 4) Place your other hand on top. 5) Push hard and fast at a rate of 100-120 compressions per minute. 6) Allow the chest to fully recoil between compressions. Continue until help arrives.";
-    } else if (
-      lowerCaseMessage.includes("bleeding") ||
-      lowerCaseMessage.includes("blood")
-    ) {
-      botResponse =
-        "To control bleeding: 1) Apply direct pressure with a clean cloth or bandage. 2) If possible, elevate the wound above the heart. 3) Apply pressure to the artery supplying the area if direct pressure doesn't work. 4) As a last resort, apply a tourniquet if the bleeding is life-threatening and on a limb. 5) Seek immediate medical attention.";
-    } else if (lowerCaseMessage.includes("choking")) {
-      botResponse =
-        "For a choking adult: 1) Ask Are you choking? If they can't speak, cough or breathe, proceed. 2) Stand behind them and wrap your arms around their waist. 3) Place your fist above their navel. 4) Grasp your fist with your other hand and pull inward and upward with quick thrusts. 5) Repeat until the object is dislodged or help arrives.";
-    } else if (
-      lowerCaseMessage.includes("burn") ||
-      lowerCaseMessage.includes("burning")
-    ) {
-      botResponse =
-        "For burns: 1) Remove the source of the burn. 2) Cool the burn with cool (not cold) running water for 10-15 minutes. 3) Cover with a sterile, non-stick bandage. 4) Don't apply butter, oil, or ointments. 5) Seek medical attention for severe burns, burns on the face, hands, feet, genitals, or covering large areas.";
-    } else if (
-      lowerCaseMessage.includes("fracture") ||
-      lowerCaseMessage.includes("broken bone")
-    ) {
-      botResponse =
-        "For a suspected fracture: 1) Immobilize the injured area. Don't try to realign the bone. 2) Apply ice packs wrapped in a towel to reduce swelling and pain. 3) Treat for shock if necessary by having the person lie down with feet elevated. 4) Seek immediate medical attention.";
-    } else if (
-      lowerCaseMessage.includes("heart attack") ||
-      lowerCaseMessage.includes("cardiac")
-    ) {
-      botResponse =
-        "Heart attack signs include: chest pain/pressure, pain radiating to arm/jaw/back, shortness of breath, cold sweat, nausea. Actions: 1) Call emergency services immediately. 2) Have the person sit and rest. 3) If the person is not allergic to aspirin, give them one to chew (if available). 4) Be prepared to perform CPR if they become unresponsive.";
-    } else if (lowerCaseMessage.includes("stroke")) {
-      botResponse =
-        "Remember FAST for stroke symptoms: Face drooping, Arm weakness, Speech difficulty, Time to call emergency services. Additional symptoms include sudden numbness, confusion, trouble seeing, dizziness, or severe headache. Call emergency services immediately if you suspect a stroke. Note the time when symptoms started.";
-    } else if (
-      lowerCaseMessage.includes("sos") ||
-      lowerCaseMessage.includes("emergency button")
-    ) {
-      botResponse =
-        "The SOS button at the top of the screen will alert your emergency contacts and send them your current location. Only use it in genuine emergencies. Your contacts will receive an SMS with your details and location.";
-    } else if (
-      lowerCaseMessage.includes("qr code") ||
-      lowerCaseMessage.includes("scan")
-    ) {
-      botResponse =
-        "Your emergency QR code contains your vital medical information and emergency contacts. If you're found unresponsive, first responders can scan this code to access critical information about you, including medical conditions, allergies, and who to contact.";
-    } else if (lowerCaseMessage.includes("thank")) {
-      botResponse =
-        "You're welcome! If you have any other questions about emergency procedures or first aid, feel free to ask.";
-    } else {
-      foundMatch = false;
-    }
+      if (!response.ok) throw new Error("API response error");
+      const data = await response.json();
+      
+      const botResponse = data.message || "I couldn't understand that. Please try again.";
 
-    if (!foundMatch) {
-      try {
-        console.log("Sending message to AI:", userMessage);
-        const response = await fetch(
-          "https://emergencyqr-kappa.vercel.app/api/chatbot/ask",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              message: userMessage,
-              id: id,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to get AI response");
-        }
-
-        const data = await response.json();
-        console.log(data);
-        botResponse =
-          data.message ||
-          "I apologize, but I'm having trouble answering that question right now. For medical emergencies, please call emergency services.";
-      } catch (error) {
-        console.error("Error getting AI response:", error);
-        botResponse =
-          "I apologize, but I'm having trouble connecting to my knowledge base. Please try again or ask about common first aid procedures like CPR, burns, bleeding, or choking.";
-      }
-    }
-
-    // Add a short delay to make the response feel more natural
-    setTimeout(
-      () => {
-        setMessages((prev) => [...prev, { type: "bot", text: botResponse }]);
+      setTimeout(() => {
+        setMessages(prev => [...prev, { type: "bot", text: botResponse }]);
         setIsBotTyping(false);
-      },
-      foundMatch ? 1500 : 500
-    ); // Shorter delay if we're waiting for API anyway
+      }, 500);
+
+    } catch (error) {
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          type: "bot", 
+          text: "Sorry, I'm having trouble connecting. Please try again later."
+        }]);
+        setIsBotTyping(false);
+      }, 500);
+    }
   };
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (inputMessage.trim() === "") return;
     processMessage(inputMessage);
+  };
+
+  const handleDownloadQR = async () => {
+    try {
+      const response = await fetch(userData.qrCode);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "emergency-qr.png";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("QR download failed:", err);
+    }
   };
 
   if (loading) {

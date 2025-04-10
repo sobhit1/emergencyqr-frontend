@@ -15,7 +15,7 @@ export default function Auth() {
   };
 
   const validatePassword = (password) => {
-    return password.length >= 6;
+    return password.length >= 8;
   };
 
   const handleLogin = async (e) => {
@@ -45,8 +45,6 @@ export default function Auth() {
         },
         body: JSON.stringify({ email, password }),
       });
-      
-        
 
       const data = await res.json();
 
